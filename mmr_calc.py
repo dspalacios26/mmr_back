@@ -1,14 +1,15 @@
+from __future__ import annotations # Ensure this is the very first line
 import asyncio
 import aiohttp
 import math
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 import os
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel # Ensure BaseModel is imported
 import logging
 
 # Configure basic logging
@@ -66,25 +67,28 @@ class CalculatedMMR:
     games_analyzed: int
     last_updated: datetime
     
-    def to_dict(self) -> dict:
-        return {
-            "summoner_name": self.summoner_name,
-            "tag_line": self.tag_line,
-            "region": self.region,
-            "mmr": round(self.current_mmr, 1),
-            "rank": self.rank,
-            "division": self.division,
-            "division_display": self._get_division_display(),
-            "lp_equivalent": self.lp_equivalent,
-            "confidence_level": round(self.confidence_level, 1),
-            "games_analyzed": self.games_analyzed,
-            "last_updated": self.last_updated.isoformat(),
-            "rank_display": f"{self.rank} {self._get_division_display()}"
-        }
-    
     def _get_division_display(self) -> str:
         division_map = {1: "I", 2: "II", 3: "III", 4: "IV"}
         return division_map.get(self.division, "I")
+
+# Pydantic model for the request body of /calculate-mmr/
+class SummonerNameRequest(BaseModel):
+    summoner_name_with_tag: str
+
+# Pydantic model for the response of /calculate-mmr/
+class CalculatedMMRResponse(BaseModel):
+    summoner_name: str
+    tag_line: str
+    region: str
+    mmr: float 
+    rank: str
+    division: int 
+    division_display: str 
+    lp_equivalent: int
+    confidence_level: float 
+    games_analyzed: int
+    last_updated: datetime 
+    rank_display: str
 
 class RiotAPIClient:
     def __init__(self, api_key: str):
@@ -483,7 +487,12 @@ class MMRService:
                 raise HTTPException(status_code=500, detail=f"MMR calculation failed: {str(e)}")
 
 # FastAPI Application
-app = FastAPI(title="League of Legends MMR Calculator", version="2.0.0")
+app = FastAPI(
+    title="LoL MMR Calculator API",
+    description="Calculates League of Legends MMR based on summoner name, region, and queue type.",
+    version="1.0.0",
+    openapi_url="/api/v1/openapi.json" 
+)
 
 # Ensure the app is accessible for Vercel
 handler = app # Vercel expects the FastAPI instance to be named 'app' or 'handler'
@@ -501,52 +510,68 @@ app.add_middleware(
 # The critical log above should be the primary indicator of a misconfiguration.
 mmr_service = MMRService(RIOT_API_KEY if RIOT_API_KEY else "MISSING_API_KEY")
 
-# Pydantic models
-class MMRRequest(BaseModel):
-    summoner_name: str
-    tag_line: str
-    region: str
-    queue_type: int = 420  # Default to Solo/Duo
+@app.get("/")
+async def health_check():
+    """Health check endpoint"""
+    # Check if the API key is configured (i.e., not None)
+    api_key_configured = bool(RIOT_API_KEY)
+    return {
+        "status": "healthy",
+        "message": "MMR Calculator API is running.",
+        "riot_api_key_configured": api_key_configured,
+        "version": app.version # Added version to health check
+    }
 
-class MMRResponse(BaseModel):
-    success: bool
-    data: Optional[dict] = None
-    error: Optional[str] = None
+# Updated endpoint to use Pydantic models for request and response
+@app.post("/calculate-mmr/", response_model=CalculatedMMRResponse)
+async def calculate_mmr_endpoint(request: SummonerNameRequest, region: Region, queue_type: QueueType, background_tasks: BackgroundTasks): # background_tasks is kept if FastAPI needs it for other reasons, but not passed to MMRService.calculate_mmr unless that method is updated to accept it.
+    if not RIOT_API_KEY:
+        logging.error("Calculate MMR endpoint called but RIOT_API_KEY is not configured.")
+        raise HTTPException(status_code=503, detail="Server is not configured to contact Riot API. API key missing.")
 
-@app.post("/calculate-mmr", response_model=MMRResponse)
-async def calculate_player_mmr(request: MMRRequest):
-    """
-    Calculate MMR for a player
-    Input: summoner_name, tag_line, region, queue_type
-    Output: Calculated MMR with rank and division
-    """
+    summoner_name_full = request.summoner_name_with_tag
+    if "#" not in summoner_name_full:
+        raise HTTPException(status_code=400, detail="Invalid summoner name format. Expected format: name#tag")
+    
+    game_name, tag_line = summoner_name_full.split("#", 1)
+
     try:
-        result = await mmr_service.calculate_mmr(
-            summoner_name=request.summoner_name,
-            tag_line=request.tag_line,
-            region=request.region,
-            queue_type=request.queue_type
+        service_to_use = MMRService(RIOT_API_KEY) 
+
+        # Corrected method call to MMRService.calculate_mmr
+        # Parameters now match the method signature: summoner_name, tag_line, region (str), queue_type (int)
+        # Removed background_tasks from this specific call as MMRService.calculate_mmr doesn't expect it.
+        internal_calc_result: CalculatedMMR = await service_to_use.calculate_mmr(
+            summoner_name=game_name,
+            tag_line=tag_line,
+            region=region.value, # Pass the string value of the Region enum
+            queue_type=queue_type.value # Pass the int value of the QueueType enum
         )
         
-        return MMRResponse(
-            success=True,
-            data=result.to_dict()
-        )
+        division_display_val = internal_calc_result._get_division_display()
         
+        response_data = CalculatedMMRResponse(
+            summoner_name=internal_calc_result.summoner_name,
+            tag_line=internal_calc_result.tag_line,
+            region=internal_calc_result.region,
+            mmr=round(internal_calc_result.current_mmr, 1),
+            rank=internal_calc_result.rank,
+            division=internal_calc_result.division,
+            division_display=division_display_val,
+            lp_equivalent=internal_calc_result.lp_equivalent,
+            confidence_level=round(internal_calc_result.confidence_level, 1),
+            games_analyzed=internal_calc_result.games_analyzed,
+            last_updated=internal_calc_result.last_updated,
+            rank_display=f"{internal_calc_result.rank} {division_display_val}"
+        )
+        return response_data
+
     except HTTPException as e:
-        # Log the details of the HTTPException if it wasn't already logged by RiotAPIClient
-        # (though _handle_riot_api_error should have logged it)
-        logging.warning(f"HTTPException caught in endpoint: {e.status_code} - {e.detail}")
-        return MMRResponse(
-            success=False,
-            error=f"API Error: {e.detail}" # e.detail is now the user-facing message
-        )
+        logging.warning(f"HTTPException in calculate_mmr_endpoint for {game_name}#{tag_line}: {e.detail} (Status: {e.status_code})")
+        raise e
     except Exception as e:
-        logging.error(f"Unexpected error during MMR calculation for {request.summoner_name}#{request.tag_line}: {str(e)}", exc_info=True)
-        return MMRResponse(
-            success=False,
-            error=f"An unexpected server error occurred during calculation."
-        )
+        logging.exception(f"Unhandled error in calculate_mmr_endpoint for {game_name}#{tag_line} in {region.value}")
+        raise HTTPException(status_code=500, detail=f"An unexpected server error occurred while calculating MMR.")
 
 @app.get("/regions")
 async def get_supported_regions():
@@ -579,17 +604,5 @@ async def get_supported_queues():
         ]
     }
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    # Check if the API key is configured (i.e., not None)
-    api_key_configured = bool(RIOT_API_KEY)
-    return {
-        "status": "healthy",
-        "api_key_configured": api_key_configured,
-        "timestamp": datetime.now().isoformat()
-    }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# Ensure handler = app is at the end of the file, after all definitions
+handler = app
