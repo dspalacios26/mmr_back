@@ -15,24 +15,18 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Riot API Configuration
-RIOT_API_KEY_PLACEHOLDER = "RGAPI-PLEASE-REPLACE-ME-WITH-YOUR-REAL-KEY" # Renamed placeholder
-RIOT_API_KEY = os.getenv("RIOT_API_KEY", RIOT_API_KEY_PLACEHOLDER) # Use the new placeholder as default
+RIOT_API_KEY = os.getenv("RIOT_API_KEY") # Directly get from env. Will be None if not set.
 RIOT_API_BASE = "https://{region}.api.riotgames.com"
 
 # Startup logging for API Key status
-if RIOT_API_KEY == RIOT_API_KEY_PLACEHOLDER:
-    logging.warning(
-        f"WARNING: RIOT_API_KEY is using the placeholder value ('{RIOT_API_KEY_PLACEHOLDER}'). "
-        "The application will not function correctly with external Riot API calls. "
-        "Ensure the RIOT_API_KEY environment variable is set to your actual key in production."
-    )
-elif not RIOT_API_KEY: # Should not happen if placeholder is default, but good for robustness
+if not RIOT_API_KEY:
     logging.critical(
-        "CRITICAL: RIOT_API_KEY environment variable is not set and no default was provided. "
-        "The application will not be able to communicate with the Riot API."
+        "CRITICAL: RIOT_API_KEY environment variable is not set. "
+        "The application will not be able to communicate with the Riot API. "
+        "Please set this environment variable in your Vercel project settings."
     )
 else:
-    logging.info("Riot API Key is configured (found in environment or using a non-placeholder default).")
+    logging.info("Riot API Key is loaded from environment variable.")
 
 
 class Region(Enum):
@@ -503,7 +497,9 @@ app.add_middleware(
 )
 
 # Initialize service
-mmr_service = MMRService(RIOT_API_KEY)
+# We'll proceed with initialization. If RIOT_API_KEY is None, RiotAPIClient will fail at runtime if used.
+# The critical log above should be the primary indicator of a misconfiguration.
+mmr_service = MMRService(RIOT_API_KEY if RIOT_API_KEY else "MISSING_API_KEY")
 
 # Pydantic models
 class MMRRequest(BaseModel):
@@ -586,11 +582,11 @@ async def get_supported_queues():
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    # Check if the API key is configured and not the placeholder
-    api_key_is_real = bool(RIOT_API_KEY and RIOT_API_KEY != RIOT_API_KEY_PLACEHOLDER)
+    # Check if the API key is configured (i.e., not None)
+    api_key_configured = bool(RIOT_API_KEY)
     return {
         "status": "healthy",
-        "api_key_configured": api_key_is_real, # Updated logic
+        "api_key_configured": api_key_configured,
         "timestamp": datetime.now().isoformat()
     }
 
