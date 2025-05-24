@@ -494,12 +494,9 @@ app = FastAPI(
     openapi_url="/api/v1/openapi.json" 
 )
 
-# Ensure the app is accessible for Vercel
-handler = app # Vercel expects the FastAPI instance to be named 'app' or 'handler'
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://your-nextjs-domain.com"],
+    allow_origins=["http://localhost:3000", "https://mmr-frntend.vercel.app"], # TODO: Update this with your actual frontend domain for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
