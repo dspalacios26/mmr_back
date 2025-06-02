@@ -8,9 +8,11 @@ from datetime import datetime, timedelta
 from enum import Enum
 import os
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel # Ensure BaseModel is imported
 import logging
+from magnum import Mangum  # For AWS Lambda compatibility
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -602,11 +604,10 @@ async def get_supported_queues():
     }
 
 
-if os.environ.get('VERCEL_ENV'):Add commentMore actions
-    # Running on Vercel - use ASGI handler
-    from asgiref.wsgi import WsgiToAsgi
-    asgi_app = WsgiToAsgi(app)
-    handler = asgi_app
+if os.environ.get('VERCEL'):
+    # Running on Vercel
+    handler = Mangum(app)
 else:
     # Local development
     handler = app
+    
