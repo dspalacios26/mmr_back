@@ -530,6 +530,16 @@ app.add_middleware(
 # The critical log above should be the primary indicator of a misconfiguration.
 mmr_service = MMRService(RIOT_API_KEY if RIOT_API_KEY else "MISSING_API_KEY")
 
+@app.post("/", response_model=CalculatedMMRResponse, summary="Alias for calculate-mmr on root")
+async def calculate_root(
+    request: SummonerNameRequest,
+    region: Region,
+    queue_type: QueueType,
+    background_tasks: BackgroundTasks
+):
+    # simply delegate to your real handler
+    return await calculate_mmr_endpoint(request, region, queue_type, background_tasks)
+
 @app.get("/")
 async def health_check():
     """Health check endpoint"""
