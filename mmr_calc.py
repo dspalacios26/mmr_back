@@ -506,6 +506,12 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         duration = (time.time() - start) * 1000
         logging.info(f"← {request.method} {request.url} [{response.status_code}] ({duration:.1f}ms)")
         return response
+    
+class CalculateRequest(BaseModel):
+    summonerName: str
+    tagLine: str
+    region: Region
+    queueType: QueueType
 
 # FastAPI Application
 app = FastAPI(
@@ -532,13 +538,13 @@ mmr_service = MMRService(RIOT_API_KEY if RIOT_API_KEY else "MISSING_API_KEY")
 
 @app.post("/", response_model=CalculatedMMRResponse, summary="Alias for calculate-mmr on root")
 async def calculate_root(
-    request: SummonerNameRequest,
-    region: Region,
-    queue_type: QueueType,
-    background_tasks: BackgroundTasks
+    req: CalculateRequest,
+    background_tasks: BackgroundTasks,  
 ):
+    name_with_tag = f"{req.summonerName}#{req.tagLine}"
+    body = SummonerNameRequest(summoner_name_with_tag=name_with_tag)
     # simply delegate to your real handler
-    return await calculate_mmr_endpoint(request, region, queue_type, background_tasks)
+    return await calculate_mmr_endpoint(body, req.region, req.queueType, background_tasks)
 
 @app.get("/")
 async def health_check():
