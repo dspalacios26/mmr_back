@@ -520,6 +520,21 @@ async def health_check():
         "version": app.version # Added version to health check
     }
 
+@app.head("/")
+async def head_health_check():
+    """Explicit HEAD handler for the health check endpoint."""
+    # For HEAD requests, we don't need to return a body.
+    # FastAPI/Uvicorn will ensure no body is sent.
+    # We can compute the same values as the GET to ensure headers would be consistent if needed,
+    # or simply return a basic 200 OK.
+    # Here, we'll just acknowledge the request.
+    # You could also call the GET handler and let FastAPI strip the body,
+    # but an explicit minimal handler is also fine.
+    return JSONResponse(content=None, status_code=200, headers={
+        "X-API-Version": app.version,
+        "X-Riot-API-Key-Configured": str(bool(RIOT_API_KEY))
+    })
+
 # Updated endpoint to use Pydantic models for request and response
 @app.post("/calculate-mmr/", response_model=CalculatedMMRResponse)
 async def calculate_mmr_endpoint(request: SummonerNameRequest, region: Region, queue_type: QueueType, background_tasks: BackgroundTasks): # background_tasks is kept if FastAPI needs it for other reasons, but not passed to MMRService.calculate_mmr unless that method is updated to accept it.
