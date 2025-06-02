@@ -602,11 +602,50 @@ async def get_supported_queues():
     }
 
 
-if os.environ.get('VERCEL_ENV'):
-    # Running on Vercel - use ASGI handler
-    from asgiref.wsgi import WsgiToAsgi
-    asgi_app = WsgiToAsgi(app)
-    handler = asgi_app
-else:
-    # Local development
-    handler = app
+# Vercel-specific ASGI handler
+def vercel_handler(request):
+    from fastapi.requests import Request
+    from fastapi.responses import Response
+    from io import BytesIO
+    
+    async def app_wrapper(scope, receive, send):
+        # Convert Vercel request to ASGI scope
+        body = request.body
+        if isinstance(body, str):
+            body = body.encode()
+        
+        scope = {
+            "type": "http",
+            "http_version": "1.1",
+            "method": request.method,
+            "path": request.path,
+            "headers": [
+                [k.encode(), v.encode()]
+                for k, v in request.headers.items()
+            ],
+            "query_string": request.query_string.encode(),
+            "body": body,
+        }
+        
+        # Create ASGI receive/send functions
+        async def asgi_receive():
+            return {
+                "type": "http.request",
+                "body": scope["body"],
+                "more_body": False,
+            }
+            
+        async def asgi_send(message):
+            if message["type"] == "http.response.start":
+                request.response.status_code = message["status"]
+                for name, value in message.get("headers", []):
+                    request.response.headers[name.decode()] = value.decode()
+            elif message["type"] == "http.response.body":
+                request.response.body = message.get("body", b"")
+        
+        await app(scope, asgi_receive, asgi_send)
+    
+    return app_wrapper
+
+# Export the FastAPI app for Vercel
+handler = app
