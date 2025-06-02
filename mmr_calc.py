@@ -601,5 +601,12 @@ async def get_supported_queues():
         ]
     }
 
-# Ensure handler = app is at the end of the file, after all definitions
-handler = app
+
+if os.environ.get('VERCEL_ENV'):
+    # Running on Vercel - use ASGI handler
+    from asgiref.wsgi import WsgiToAsgi
+    asgi_app = WsgiToAsgi(app)
+    handler = asgi_app
+else:
+    # Local development
+    handler = app
