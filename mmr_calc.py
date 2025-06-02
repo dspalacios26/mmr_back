@@ -12,10 +12,16 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel # Ensure BaseModel is imported
 import logging
+import time
+from starlette.requests import Request
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 # Configure basic logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s | %(levelname)8s | %(name)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 # Riot API Configuration
 RIOT_API_KEY = os.getenv("RIOT_API_KEY") # Directly get from env. Will be None if not set.
 RIOT_API_BASE = "https://{region}.api.riotgames.com"
@@ -487,6 +493,20 @@ class MMRService:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"MMR calculation failed: {str(e)}")
 
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint):
+        start = time.time()
+        logging.info(f"→ {request.method} {request.url}")
+        try:
+            body = await request.body()
+            logging.debug(f"  Request body: {body.decode('utf-8', 'ignore')}")
+        except Exception:
+            logging.debug("  (could not read request body)")
+        response = await call_next(request)
+        duration = (time.time() - start) * 1000
+        logging.info(f"← {request.method} {request.url} [{response.status_code}] ({duration:.1f}ms)")
+        return response
+
 # FastAPI Application
 app = FastAPI(
     title="LoL MMR Calculator API",
@@ -494,6 +514,8 @@ app = FastAPI(
     version="1.0.0",
     openapi_url="/api/v1/openapi.json" 
 )
+
+app.add_middleware(LoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -538,6 +560,8 @@ async def head_health_check():
 # Updated endpoint to use Pydantic models for request and response
 @app.post("/calculate-mmr/", response_model=CalculatedMMRResponse)
 async def calculate_mmr_endpoint(request: SummonerNameRequest, region: Region, queue_type: QueueType, background_tasks: BackgroundTasks): # background_tasks is kept if FastAPI needs it for other reasons, but not passed to MMRService.calculate_mmr unless that method is updated to accept it.
+    logging.debug(f"calculate_mmr_endpoint START summoner={request.summoner_name_with_tag} "
+                  f"region={region.value} queue={queue_type.value}")
     if not RIOT_API_KEY:
         logging.error("Calculate MMR endpoint called but RIOT_API_KEY is not configured.")
         raise HTTPException(status_code=503, detail="Server is not configured to contact Riot API. API key missing.")
@@ -549,6 +573,12 @@ async def calculate_mmr_endpoint(request: SummonerNameRequest, region: Region, q
     game_name, tag_line = summoner_name_full.split("#", 1)
 
     try:
+        logging.debug("Invoking MMRService.calculate_mmr()")
+        internal = await MMRService(RIOT_API_KEY).calculate_mmr(
+            summoner_name=game_name, tag_line=tag_line,
+            region=region.value, queue_type=queue_type.value
+        )
+        logging.debug(f"Service returned MMR={internal.current_mmr:.1f}")
         service_to_use = MMRService(RIOT_API_KEY) 
 
         # Corrected method call to MMRService.calculate_mmr
