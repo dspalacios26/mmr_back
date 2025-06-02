@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel # Ensure BaseModel is imported
 import logging
-from mangum import Mangum  # For AWS Lambda compatibility
+from mangum import Mangum
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
