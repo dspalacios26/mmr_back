@@ -586,6 +586,22 @@ async def calculate_mmr_endpoint(request: SummonerNameRequest, region: Region, q
         logging.exception(f"Unhandled error in calculate_mmr_endpoint for {game_name}#{tag_line} in {region.value}")
         raise HTTPException(status_code=500, detail=f"An unexpected server error occurred while calculating MMR.")
 
+@app.post(
+    "/api/calculate",
+    response_model=CalculatedMMRResponse,
+    summary="Alias for /calculate-mmr/"
+)
+async def calculate_alias(
+    request: SummonerNameRequest,
+    region: Region,
+    queue_type: QueueType,
+    background_tasks: BackgroundTasks
+):
+    # just delegate to your real handler
+    return await calculate_mmr_endpoint(request, region, queue_type, background_tasks)
+
+
+
 @app.get("/regions")
 async def get_supported_regions():
     """Get list of supported regions"""
