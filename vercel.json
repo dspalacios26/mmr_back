@@ -12,10 +12,5 @@
       "src": "/(.*)",
       "dest": "mmr_calc.py"
     }
-  ],
-  "functions": {
-    "mmr_calc.py": {
-      "runtime": "python3.9"
-    }
-  }
+  ]
 }
