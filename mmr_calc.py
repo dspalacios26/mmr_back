@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel # Ensure BaseModel is imported
 import logging
-from mangum import Mangum
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -603,10 +602,10 @@ async def get_supported_queues():
         ]
     }
 
+# ASGI application for Vercel
+async def app_asgi(scope, receive, send):
+    """ASGI wrapper for Vercel compatibility"""
+    await app(scope, receive, send)
 
-if os.environ.get('VERCEL'):
-    # Running on Vercel
-    handler = Mangum(app)
-else:
-    # Local development
-    handler = app
+# Export for Vercel
+handler = app_asgi
