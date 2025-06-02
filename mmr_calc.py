@@ -602,10 +602,10 @@ async def get_supported_queues():
         ]
     }
 
-# ASGI application for Vercel
-async def app_asgi(scope, receive, send):
-    """ASGI wrapper for Vercel compatibility"""
-    await app(scope, receive, send)
+# # ASGI application for Vercel
+# async def app_asgi(scope, receive, send):
+#     """ASGI wrapper for Vercel compatibility"""
+#     await app(scope, receive, send)
 
-# Export for Vercel
-handler = app_asgi
+# # Export for Vercel
+# handler = app_asgi

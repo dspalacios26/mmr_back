@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: mmr-calculator-backend
+    env: python
+    region: oregon # Or your preferred region: oregon, frankfurt, ohio, singapore
+    plan: free # Or your preferred plan
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn mmr_calc:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.9" # Or 3.10, 3.11, etc.
+      # RIOT_API_KEY will be set in the Render dashboard for security
