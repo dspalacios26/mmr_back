@@ -508,10 +508,13 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         return response
     
 class CalculateRequest(BaseModel):
-    summonerName: str
-    tagLine: str
-    region: Region
-    queueType: QueueType
+    summoner_name: str 
+    tag_line:      str 
+    region:        Region
+    queue_type:    QueueType
+
+    class Config:
+        allow_population_by_field_name = True
 
 # FastAPI Application
 app = FastAPI(
@@ -536,15 +539,19 @@ app.add_middleware(
 # The critical log above should be the primary indicator of a misconfiguration.
 mmr_service = MMRService(RIOT_API_KEY if RIOT_API_KEY else "MISSING_API_KEY")
 
-@app.post("/", response_model=CalculatedMMRResponse, summary="Alias for calculate-mmr on root")
+@app.post("/", response_model=CalculatedMMRResponse)
 async def calculate_root(
     req: CalculateRequest,
-    background_tasks: BackgroundTasks,  
+    background_tasks: BackgroundTasks
 ):
-    name_with_tag = f"{req.summonerName}#{req.tagLine}"
-    body = SummonerNameRequest(summoner_name_with_tag=name_with_tag)
-    # simply delegate to your real handler
-    return await calculate_mmr_endpoint(body, req.region, req.queueType, background_tasks)
+    # build the single “name#tag” string
+    name_with_tag = f"{req.summoner_name}#{req.tag_line}"
+    summ_req = SummonerNameRequest(
+      summoner_name_with_tag=name_with_tag
+    )
+    return await calculate_mmr_endpoint(
+      summ_req, req.region, req.queue_type, background_tasks
+    )
 
 @app.get("/")
 async def health_check():
